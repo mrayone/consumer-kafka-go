@@ -121,3 +121,4 @@ The consumer loop, output printer, and CLI plumbing do not need to change.
 │   └── output/                   # MarshalIndent printer
 └── README.md
 ```
+# consumer-kafka-go
