@@ -1,0 +1,13 @@
+# Confluent Cloud Kafka cluster
+broker_url: "pkc-xxxxx.region.provider.confluent.cloud:9092"
+username: "KAFKA_API_KEY"
+password: "KAFKA_API_SECRET"
+
+target_topic: "my-topic"
+group_id: "consumer-kafka-go"
+
+# Confluent Schema Registry (required for --format=avro)
+schema_registry_url: "https://psrc-xxxxx.region.provider.confluent.cloud"
+schema_registry_user: "SR_API_KEY"
+schema_registry_pass: "SR_API_SECRET"
+schema_subject: "my-topic-value"
