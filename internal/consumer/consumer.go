@@ -12,17 +12,17 @@ import (
 
 	"github.com/mayconrayone/consumer-kafka-go/internal/config"
 	"github.com/mayconrayone/consumer-kafka-go/internal/deserializer"
-	"github.com/mayconrayone/consumer-kafka-go/internal/output"
+	"github.com/mayconrayone/consumer-kafka-go/internal/sink"
 )
 
 type Consumer struct {
 	reader  *kafka.Reader
 	decoder deserializer.MessageDeserializer
-	printer *output.Printer
+	sinks   []sink.Sink
 	errLog  *log.Logger
 }
 
-func New(cfg *config.Config, d deserializer.MessageDeserializer, p *output.Printer, errLog *log.Logger) *Consumer {
+func New(cfg *config.Config, d deserializer.MessageDeserializer, sinks []sink.Sink, errLog *log.Logger) *Consumer {
 	dialer := &kafka.Dialer{
 		Timeout:   10 * time.Second,
 		DualStack: true,
@@ -41,7 +41,7 @@ func New(cfg *config.Config, d deserializer.MessageDeserializer, p *output.Print
 		StartOffset: kafka.LastOffset,
 		Dialer:      dialer,
 	})
-	return &Consumer{reader: r, decoder: d, printer: p, errLog: errLog}
+	return &Consumer{reader: r, decoder: d, sinks: sinks, errLog: errLog}
 }
 
 func (c *Consumer) Run(ctx context.Context) error {
@@ -66,8 +66,19 @@ func (c *Consumer) Run(ctx context.Context) error {
 				msg.Offset, msg.Partition, err)
 			continue
 		}
-		if err := c.printer.Print(decoded); err != nil {
-			c.errLog.Printf("print error: %v", err)
+		evt := sink.Event{
+			Topic:     msg.Topic,
+			Partition: msg.Partition,
+			Offset:    msg.Offset,
+			Key:       msg.Key,
+			Timestamp: msg.Time,
+			Decoded:   decoded,
+		}
+		for _, s := range c.sinks {
+			if err := s.Store(ctx, evt); err != nil {
+				c.errLog.Printf("sink error (offset=%d partition=%d): %v",
+					msg.Offset, msg.Partition, err)
+			}
 		}
 	}
 }

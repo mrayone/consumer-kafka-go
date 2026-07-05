@@ -11,3 +11,6 @@ schema_registry_url: "https://psrc-xxxxx.region.provider.confluent.cloud"
 schema_registry_user: "SR_API_KEY"
 schema_registry_pass: "SR_API_SECRET"
 schema_subject: "my-topic-value"
+
+# Postgres event store (required for --sink=postgres|both)
+postgres_dsn: "postgres://user:pass@localhost:5432/event_store?sslmode=disable"

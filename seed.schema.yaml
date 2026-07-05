@@ -1,0 +1,43 @@
+# Seed schema: each field maps to a gofakeit-backed generator.
+#
+# Scalar types: uuid, name, firstname, lastname, email, username, company,
+#   city, country, url, ipv4, useragent, phone, word, bool, date,
+#   sentence[:words], paragraph[:paragraphs,sentences,words],
+#   lorem[:paragraphs,sentences,words],
+#   int[:min,max], float[:min,max], price[:min,max], oneof:a,b,c
+# Any other type falls through to gofakeit's template engine
+#   (e.g. "hackerphrase", "creditcardnumber", "beername").
+#
+# Nested objects use `fields:`; arrays use `repeat:` + `of:`.
+#
+# Note: Postgres only TOAST-compresses values above ~2 KB, so the
+# `description` paragraph below is intentionally large to make the
+# pglz vs lz4 comparison meaningful.
+fields:
+  event_id: uuid
+  event_type: "oneof:user.created,order.placed,order.paid,order.shipped,user.deleted"
+  occurred_at: date
+  amount: "price:5,500"
+  active: bool
+  user:
+    fields:
+      id: uuid
+      name: name
+      email: email
+      city: city
+      country: country
+      user_agent: useragent
+      ip: ipv4
+  items:
+    repeat: 3
+    of:
+      fields:
+        sku: uuid
+        product: word
+        quantity: "int:1,10"
+        unit_price: "price:1,100"
+  tags:
+    repeat: 5
+    of: word
+  summary: "paragraph:2,4,10"
+  description: "lorem:4,8,15"
