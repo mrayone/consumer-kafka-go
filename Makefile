@@ -2,6 +2,7 @@
 	docker-build docker-up docker-down docker-logs \
 	topic-create produce-json produce-avro register-avro-schema \
 	seed compare-compression psql \
+	migrate-up migrate-down migrate-status migrate-create \
 	smoke-json smoke-avro smoke-test
 
 BINARY          := consumer-kafka-go
@@ -92,6 +93,21 @@ SEED_SCHEMA := seed.schema.yaml
 SEED_COUNT  := 10000
 PG_CONTAINER := ckg-postgres
 PSQL := docker exec -i $(PG_CONTAINER) psql -U events -d event_store
+PG_DSN ?= postgres://events:events@localhost:5432/event_store?sslmode=disable
+GOOSE := go tool goose -dir migrations postgres "$(PG_DSN)"
+
+migrate-up: ## Apply all pending goose migrations
+	$(GOOSE) up
+
+migrate-down: ## Roll back the last goose migration
+	$(GOOSE) down
+
+migrate-status: ## Show goose migration status
+	$(GOOSE) status
+
+migrate-create: ## Create a new SQL migration (NAME=add_something)
+	@test -n "$(NAME)" || (echo "usage: make migrate-create NAME=add_something" && exit 1)
+	go tool goose -dir migrations -s create $(NAME) sql
 
 seed: build ## Produce fake events to the topic (SEED_COUNT=10000 SEED_SCHEMA=seed.schema.yaml)
 	./$(BINARY) seed --config=$(LOCAL_CFG) --schema=$(SEED_SCHEMA) \

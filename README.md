@@ -89,12 +89,24 @@ With `--sink=postgres|both` every decoded event is written to **two** identical 
 - `event_store_pglz` — `ALTER COLUMN payload SET COMPRESSION pglz`
 - `event_store_lz4` — `ALTER COLUMN payload SET COMPRESSION lz4`
 
-The schema is created automatically on startup. Note that Postgres only compresses values larger than ~2 KB (TOAST threshold), so make your seeded payloads big enough — the example schema's `description` paragraph exists for exactly that reason.
+The schema is managed with [goose](https://github.com/pressly/goose) migrations in `migrations/` (goose is wired as a `go tool`, so no separate install is needed):
+
+```sh
+make migrate-up                     # apply pending migrations
+make migrate-status                 # show migration status
+make migrate-down                   # roll back the last migration
+make migrate-create NAME=add_thing  # scaffold a new SQL migration
+```
+
+Point `PG_DSN` at another database to migrate it (`make migrate-up PG_DSN=postgres://...`). The consumer fails fast with a clear error if the tables are missing.
+
+Note that Postgres only compresses values larger than ~2 KB (TOAST threshold), so make your seeded payloads big enough — the example schema's `description` field exists for exactly that reason.
 
 Local end-to-end run:
 
 ```sh
 make docker-up                    # Kafka + Schema Registry + Postgres + Kafka UI
+make migrate-up                   # create the event_store tables
 make run-json-pg                  # consumer with stdout + postgres sinks (leave it running)
 make seed SEED_COUNT=50000        # in another terminal
 make compare-compression          # pglz vs lz4 size report
@@ -191,6 +203,7 @@ The consumer loop, output printer, and CLI plumbing do not need to change.
 ├── main.go                       # cobra wiring (consume root + seed subcommand)
 ├── config.example.yaml
 ├── seed.schema.yaml              # example fake-data schema for `seed`
+├── migrations/                   # goose SQL migrations for the event store
 ├── internal/
 │   ├── config/                   # YAML loader + validation
 │   ├── consumer/                 # kafka.Reader + run loop fanning out to sinks

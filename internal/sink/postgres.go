@@ -9,34 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// event_store tables are identical except for the TOAST compression method
-// applied to the jsonb payload column, so the same stream of events can be
-// used to compare pglz vs lz4 on-disk size and write cost.
-var eventStoreDDL = []string{
-	`CREATE TABLE IF NOT EXISTS event_store_pglz (
-		id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-		topic      text        NOT NULL,
-		partition  int         NOT NULL,
-		"offset"   bigint      NOT NULL,
-		key        text,
-		payload    jsonb       NOT NULL,
-		created_at timestamptz NOT NULL DEFAULT now(),
-		UNIQUE (topic, partition, "offset")
-	)`,
-	`ALTER TABLE event_store_pglz ALTER COLUMN payload SET COMPRESSION pglz`,
-	`CREATE TABLE IF NOT EXISTS event_store_lz4 (
-		id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-		topic      text        NOT NULL,
-		partition  int         NOT NULL,
-		"offset"   bigint      NOT NULL,
-		key        text,
-		payload    jsonb       NOT NULL,
-		created_at timestamptz NOT NULL DEFAULT now(),
-		UNIQUE (topic, partition, "offset")
-	)`,
-	`ALTER TABLE event_store_lz4 ALTER COLUMN payload SET COMPRESSION lz4`,
-}
-
+// The event_store schema is managed by goose migrations (see migrations/);
+// run `make migrate-up` before consuming with this sink.
 const insertSQL = `INSERT INTO %s (topic, partition, "offset", key, payload)
 	VALUES ($1, $2, $3, $4, $5)
 	ON CONFLICT (topic, partition, "offset") DO NOTHING`
@@ -55,11 +29,18 @@ func NewPostgres(ctx context.Context, dsn string) (*Postgres, error) {
 		pool.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
-	for _, stmt := range eventStoreDDL {
-		if _, err := pool.Exec(ctx, stmt); err != nil {
-			pool.Close()
-			return nil, fmt.Errorf("ensure event_store schema: %w", err)
-		}
+	// Fail fast with a clear message if migrations haven't been applied.
+	var exists bool
+	err = pool.QueryRow(ctx,
+		`SELECT to_regclass('event_store_pglz') IS NOT NULL AND to_regclass('event_store_lz4') IS NOT NULL`,
+	).Scan(&exists)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("check event_store schema: %w", err)
+	}
+	if !exists {
+		pool.Close()
+		return nil, fmt.Errorf("event_store tables not found: run migrations first (make migrate-up)")
 	}
 	return &Postgres{pool: pool}, nil
 }
