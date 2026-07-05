@@ -38,7 +38,7 @@ func New(cfg *config.Config, d deserializer.MessageDeserializer, sinks []sink.Si
 		Brokers:     []string{cfg.BrokerURL},
 		GroupID:     cfg.GroupID,
 		Topic:       cfg.TargetTopic,
-		StartOffset: kafka.LastOffset,
+		StartOffset: kafka.FirstOffset,
 		Dialer:      dialer,
 	})
 	return &Consumer{reader: r, decoder: d, sinks: sinks, errLog: errLog}
