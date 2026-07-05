@@ -24,6 +24,7 @@ type Config struct {
 	SchemaRegistryUser string `yaml:"schema_registry_user"`
 	SchemaRegistryPass string `yaml:"schema_registry_pass"`
 	SchemaSubject      string `yaml:"schema_subject"`
+	PostgresDSN        string `yaml:"postgres_dsn"`
 }
 
 func Load(path string) (*Config, error) {
@@ -39,6 +40,38 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) Validate(format string) error {
+	missing, err := c.validateCommon()
+	if err != nil {
+		return err
+	}
+	if c.GroupID == "" {
+		missing = append(missing, "group_id")
+	}
+	if format == "avro" {
+		if c.SchemaRegistryURL == "" {
+			missing = append(missing, "schema_registry_url")
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required config fields: %v", missing)
+	}
+	return nil
+}
+
+// ValidateProducer checks only the fields needed to produce messages
+// (no consumer group or schema registry required).
+func (c *Config) ValidateProducer() error {
+	missing, err := c.validateCommon()
+	if err != nil {
+		return err
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required config fields: %v", missing)
+	}
+	return nil
+}
+
+func (c *Config) validateCommon() ([]string, error) {
 	var missing []string
 	if c.SecurityProtocol == "" {
 		c.SecurityProtocol = SecuritySASLSSL
@@ -54,21 +87,10 @@ func (c *Config) Validate(format string) error {
 			missing = append(missing, "password")
 		}
 	} else if c.SecurityProtocol != SecurityPlaintext {
-		return fmt.Errorf("unsupported security_protocol %q (expected SASL_SSL|PLAINTEXT)", c.SecurityProtocol)
+		return nil, fmt.Errorf("unsupported security_protocol %q (expected SASL_SSL|PLAINTEXT)", c.SecurityProtocol)
 	}
 	if c.TargetTopic == "" {
 		missing = append(missing, "target_topic")
 	}
-	if c.GroupID == "" {
-		missing = append(missing, "group_id")
-	}
-	if format == "avro" {
-		if c.SchemaRegistryURL == "" {
-			missing = append(missing, "schema_registry_url")
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("missing required config fields: %v", missing)
-	}
-	return nil
+	return missing, nil
 }

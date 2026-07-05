@@ -1,6 +1,7 @@
-.PHONY: help tidy build test vet run-json run-avro \
+.PHONY: help tidy build test vet run-json run-avro run-json-pg \
 	docker-build docker-up docker-down docker-logs \
 	topic-create produce-json produce-avro register-avro-schema \
+	seed compare-compression psql \
 	smoke-json smoke-avro smoke-test
 
 BINARY          := consumer-kafka-go
@@ -33,6 +34,9 @@ run-json: build ## Run against the local stack in JSON mode
 
 run-avro: build ## Run against the local stack in Avro mode
 	./$(BINARY) --format=avro --config=$(LOCAL_CFG)
+
+run-json-pg: build ## Consume JSON and store events in the Postgres event store
+	./$(BINARY) --format=json --config=$(LOCAL_CFG) --sink=both
 
 # ---------- Docker ----------
 
@@ -81,6 +85,37 @@ produce-avro: topic-create register-avro-schema ## Produce an Avro record (Confl
 			--property value.schema.id=1 \
 			--property auto.register=false
 	@echo "produced 1 Avro record to $(TOPIC)"
+
+# ---------- Seeder & Postgres event store ----------
+
+SEED_SCHEMA := seed.schema.yaml
+SEED_COUNT  := 10000
+PG_CONTAINER := ckg-postgres
+PSQL := docker exec -i $(PG_CONTAINER) psql -U events -d event_store
+
+seed: build ## Produce fake events to the topic (SEED_COUNT=10000 SEED_SCHEMA=seed.schema.yaml)
+	./$(BINARY) seed --config=$(LOCAL_CFG) --schema=$(SEED_SCHEMA) \
+		--count=$(SEED_COUNT) --key-field=event_id
+
+psql: ## Open a psql shell on the event store
+	docker exec -it $(PG_CONTAINER) psql -U events -d event_store
+
+compare-compression: ## Compare pglz vs lz4 on-disk size of the event store tables
+	@$(PSQL) -x -c "\
+		SELECT 'pglz' AS method, \
+		       count(*) AS events, \
+		       pg_size_pretty(pg_total_relation_size('event_store_pglz')) AS total_size, \
+		       pg_size_pretty(pg_table_size('event_store_pglz')) AS table_size, \
+		       pg_size_pretty(sum(pg_column_size(payload))::bigint) AS payload_stored, \
+		       pg_size_pretty(avg(pg_column_size(payload))::bigint) AS avg_payload \
+		FROM event_store_pglz \
+		UNION ALL \
+		SELECT 'lz4', count(*), \
+		       pg_size_pretty(pg_total_relation_size('event_store_lz4')), \
+		       pg_size_pretty(pg_table_size('event_store_lz4')), \
+		       pg_size_pretty(sum(pg_column_size(payload))::bigint), \
+		       pg_size_pretty(avg(pg_column_size(payload))::bigint) \
+		FROM event_store_lz4;"
 
 # ---------- End-to-end smoke tests ----------
 

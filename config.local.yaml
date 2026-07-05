@@ -6,3 +6,6 @@ group_id: "consumer-kafka-go-local"
 
 schema_registry_url: "http://localhost:8081"
 schema_subject: "demo-topic-value"
+
+# Postgres event store (required for --sink=postgres|both)
+postgres_dsn: "postgres://events:events@localhost:5432/event_store?sslmode=disable"

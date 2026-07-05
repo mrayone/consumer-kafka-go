@@ -14,37 +14,81 @@ import (
 	"github.com/mayconrayone/consumer-kafka-go/internal/consumer"
 	"github.com/mayconrayone/consumer-kafka-go/internal/deserializer"
 	"github.com/mayconrayone/consumer-kafka-go/internal/output"
+	"github.com/mayconrayone/consumer-kafka-go/internal/seeder"
+	"github.com/mayconrayone/consumer-kafka-go/internal/sink"
 )
 
 func main() {
 	var (
 		format     string
 		configPath string
+		sinkName   string
 	)
 
-	cmd := &cobra.Command{
+	// Root keeps the original consume behavior so existing invocations
+	// (`consumer-kafka-go --format=json --config=...`) still work.
+	root := &cobra.Command{
 		Use:   "consumer-kafka-go",
-		Short: "Confluent Kafka consumer that prints messages as pretty JSON",
+		Short: "Kafka consumer with pluggable sinks (stdout, postgres event store) and a fake-data seeder",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return run(cmd.Context(), format, configPath)
+			return runConsume(cmd.Context(), format, configPath, sinkName)
 		},
 	}
+	root.Flags().StringVarP(&format, "format", "f", "", "message format: json|avro (required)")
+	root.Flags().StringVarP(&configPath, "config", "c", "", "path to YAML config file (required)")
+	root.Flags().StringVarP(&sinkName, "sink", "s", "stdout", "where to send decoded events: stdout|postgres|both")
+	_ = root.MarkFlagRequired("format")
+	_ = root.MarkFlagRequired("config")
 
-	cmd.Flags().StringVarP(&format, "format", "f", "", "message format: json|avro (required)")
-	cmd.Flags().StringVarP(&configPath, "config", "c", "", "path to YAML config file (required)")
-	_ = cmd.MarkFlagRequired("format")
-	_ = cmd.MarkFlagRequired("config")
+	root.AddCommand(seedCmd())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := cmd.ExecuteContext(ctx); err != nil {
+	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, format, configPath string) error {
+func seedCmd() *cobra.Command {
+	var (
+		configPath string
+		schemaPath string
+		opts       seeder.Options
+	)
+	cmd := &cobra.Command{
+		Use:   "seed",
+		Short: "Produce fake events to the target topic from a YAML schema (gofakeit)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := config.Load(configPath)
+			if err != nil {
+				return err
+			}
+			if err := cfg.ValidateProducer(); err != nil {
+				return err
+			}
+			schema, err := seeder.LoadSchema(schemaPath)
+			if err != nil {
+				return err
+			}
+			errLog := log.New(os.Stderr, "[seeder] ", log.LstdFlags|log.Lmicroseconds)
+			return seeder.New(cfg, schema, opts, errLog).Run(cmd.Context())
+		},
+	}
+	cmd.Flags().StringVarP(&configPath, "config", "c", "", "path to YAML config file (required)")
+	cmd.Flags().StringVarP(&schemaPath, "schema", "S", "", "path to YAML seed schema (required)")
+	cmd.Flags().IntVarP(&opts.Count, "count", "n", 1000, "number of events to produce")
+	cmd.Flags().IntVarP(&opts.BatchSize, "batch", "b", 500, "messages per producer batch")
+	cmd.Flags().IntVarP(&opts.Workers, "workers", "w", 4, "concurrent producer workers")
+	cmd.Flags().IntVarP(&opts.Partitions, "partitions", "p", 3, "partitions when creating the topic")
+	cmd.Flags().StringVarP(&opts.KeyField, "key-field", "k", "", "schema field to use as the message key")
+	_ = cmd.MarkFlagRequired("config")
+	_ = cmd.MarkFlagRequired("schema")
+	return cmd
+}
+
+func runConsume(ctx context.Context, format, configPath, sinkName string) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
@@ -58,7 +102,31 @@ func run(ctx context.Context, format, configPath string) error {
 		return err
 	}
 
+	var sinks []sink.Sink
+	switch sinkName {
+	case "stdout", "both":
+		sinks = append(sinks, sink.NewStdout(output.New(os.Stdout)))
+	case "postgres":
+	default:
+		return fmt.Errorf("unsupported sink %q (expected stdout|postgres|both)", sinkName)
+	}
+	if sinkName == "postgres" || sinkName == "both" {
+		if cfg.PostgresDSN == "" {
+			return fmt.Errorf("sink %q requires postgres_dsn in the config file", sinkName)
+		}
+		pg, err := sink.NewPostgres(ctx, cfg.PostgresDSN)
+		if err != nil {
+			return err
+		}
+		sinks = append(sinks, pg)
+	}
+	defer func() {
+		for _, s := range sinks {
+			_ = s.Close()
+		}
+	}()
+
 	errLog := log.New(os.Stderr, "[consumer-kafka-go] ", log.LstdFlags|log.Lmicroseconds)
-	c := consumer.New(cfg, dec, output.New(os.Stdout), errLog)
+	c := consumer.New(cfg, dec, sinks, errLog)
 	return c.Run(ctx)
 }
