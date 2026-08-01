@@ -1,3 +1,75 @@
+# ---- Go ----
+# Compiled binaries and the app binary itself
 /consumer-kafka-go
-/config.yaml
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries and coverage
+*.test
+*.out
+coverage.*
+profile.cov
+
+# Go workspace / vendor
+go.work
+go.work.sum
+/vendor/
+
+# Build output directories
+/bin/
+/dist/
+
+# ---- Config & secrets ----
+# Runtime config (config.local.yaml / config.example.yaml are committed on purpose)
+config.yaml
+.env
+.env.*
+!.env.example
+
+# ---- Logs ----
 *.log
+
+# ---- OS files ----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---- VS Code ----
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+.history/
+*.vsix
+
+# ---- JetBrains (GoLand / IntelliJ) ----
+# Per-user files inside .idea/ are handled by .idea/.gitignore (JetBrains-managed).
+# The lines below cover user-specific IDE artifacts regardless of location.
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf/
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/httpRequests/
+.idea/**/contentModel.xml
+.idea/**/aws.xml
+*.iml
+*.ipr
+*.iws
+out/
+cmake-build-*/
