@@ -26,6 +26,7 @@ internal/
   config/                     # YAML loader, validation, tuning defaults (ApplyDefaults)
   consumer/                   # N parallel readers, batching pipeline, offset commit
   deserializer/               # MessageDeserializer interface + JSON/Avro impls
+  logging/                    # logrus logger built from config log_level
   metrics/                    # Prometheus collectors + /metrics HTTP server
   schemaregistry/             # Schema Registry client with in-memory cache
   seeder/                     # YAML schema -> gofakeit -> kafka.Writer
@@ -60,6 +61,9 @@ metrics `localhost:2112/metrics`.
   `ON CONFLICT DO NOTHING`).
 - Throughput/parallelism knobs live under `tuning:` in the config; defaults are
   applied in `internal/config` `ApplyDefaults`.
+- Logging is logrus (`internal/logging`), to stderr, level from config `log_level`
+  (`error|info|debug`). Log errors at `.Error`, lifecycle/throughput at `.Info`.
+  Decoded messages print to stdout only at `debug`. There is no `--silent`/CLI flag.
 - Metrics are defined in `internal/metrics`; add new ones there and, if useful,
   a panel in `observability/grafana/dashboards/consumer.json`.
 

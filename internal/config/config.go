@@ -13,6 +13,29 @@ const (
 	SecurityPlaintext = "PLAINTEXT" // local docker broker, no auth/TLS
 )
 
+// Log levels, ordered by increasing verbosity. Errors always print.
+//   - LogError: only errors.
+//   - LogInfo:  + lifecycle and per-batch consumption sizes (default).
+//   - LogDebug: + decoded messages printed as JSON to stdout.
+const (
+	LogError = "error"
+	LogInfo  = "info"
+	LogDebug = "debug"
+)
+
+// LogRank maps a log level to a numeric severity (higher = more verbose);
+// unknown values fall back to info.
+func LogRank(level string) int {
+	switch level {
+	case LogError:
+		return 0
+	case LogDebug:
+		return 2
+	default:
+		return 1 // info
+	}
+}
+
 type Config struct {
 	BrokerURL          string `yaml:"broker_url"`
 	SecurityProtocol   string `yaml:"security_protocol"`
@@ -25,6 +48,10 @@ type Config struct {
 	SchemaRegistryPass string `yaml:"schema_registry_pass"`
 	SchemaSubject      string `yaml:"schema_subject"`
 	PostgresDSN        string `yaml:"postgres_dsn"`
+
+	// LogLevel controls stderr verbosity and whether decoded messages are
+	// printed to stdout: error | info | debug. Default "info".
+	LogLevel string `yaml:"log_level"`
 
 	// MetricsAddr is the listen address for the Prometheus /metrics endpoint.
 	// Empty disables metrics. Default ":2112".
@@ -63,6 +90,9 @@ func Load(path string) (*Config, error) {
 // ApplyDefaults fills unset tuning/metrics fields with production-sane values.
 // Call after Load and before building the consumer.
 func (c *Config) ApplyDefaults() {
+	if c.LogLevel == "" {
+		c.LogLevel = LogInfo
+	}
 	if c.MetricsAddr == "" {
 		c.MetricsAddr = ":2112"
 	}
@@ -108,6 +138,11 @@ func (c *Config) Validate(format string) error {
 		if c.SchemaRegistryURL == "" {
 			missing = append(missing, "schema_registry_url")
 		}
+	}
+	switch c.LogLevel {
+	case "", LogError, LogInfo, LogDebug:
+	default:
+		return fmt.Errorf("unsupported log_level %q (expected error|info|debug)", c.LogLevel)
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required config fields: %v", missing)

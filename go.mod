@@ -8,6 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/segmentio/kafka-go v0.4.47
+	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.8.1
 	golang.org/x/sync v0.22.0
 	gopkg.in/yaml.v3 v3.0.1

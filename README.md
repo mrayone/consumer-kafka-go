@@ -50,7 +50,7 @@ schema_subject: "my-topic-value"
 
 Schema Registry fields are only required when running with `--format=avro`. `postgres_dsn` is only required when running with `--sink=postgres|both`.
 
-The config also accepts `metrics_addr` and a `tuning:` block that control the Prometheus endpoint and consumer throughput/parallelism — see [Throughput tuning](#throughput-tuning) and [Observability](#observability-grafana--prometheus). `config.local.yaml` is a ready-to-use profile for the local Docker stack (PLAINTEXT broker, local Postgres, 4 parallel readers).
+The config also accepts `log_level` (`error|info|debug`, see [Logging & verbosity](#logging--verbosity)), `metrics_addr`, and a `tuning:` block that control logging, the Prometheus endpoint, and consumer throughput/parallelism — see [Throughput tuning](#throughput-tuning) and [Observability](#observability-grafana--prometheus). `config.local.yaml` is a ready-to-use profile for the local Docker stack (PLAINTEXT broker, local Postgres, 4 parallel readers).
 
 ## Usage
 
@@ -66,6 +66,27 @@ The config also accepts `metrics_addr` and a `tuning:` block that control the Pr
 # Store decoded events in the Postgres event store (and also print with --sink=both)
 ./consumer-kafka-go --format=json --config=./config.yaml --sink=postgres
 ```
+
+### Logging & verbosity
+
+Logging uses [logrus](https://github.com/sirupsen/logrus) and writes to **stderr**
+(stdout is reserved for decoded message output). Verbosity is set by `log_level`
+in the config file — there is no CLI flag:
+
+| `log_level` | stderr | stdout |
+|---|---|---|
+| `error` | errors only | — |
+| `info` (default) | errors + lifecycle + per-batch consumption sizes | — |
+| `debug` | all of the above | decoded messages as JSON |
+
+So `info` keeps the console clean while still reporting throughput; each flush logs:
+
+```
+level=info msg="consumed batch" messages=300 decoded=300 bytes=1265421
+```
+
+Decoded messages are printed **only at `debug`** (and only when `--sink` includes
+`stdout`/`both`). Use `--sink=postgres` for pure ingestion regardless of level.
 
 ### Seed fake events
 
@@ -344,6 +365,7 @@ The consumer loop, output printer, and CLI plumbing do not need to change.
 │   ├── config/                   # YAML loader + validation + tuning defaults
 │   ├── consumer/                 # N parallel readers, batching pipeline, offset commit
 │   ├── deserializer/             # interface + JSON/Avro implementations
+│   ├── logging/                  # logrus logger built from log_level
 │   ├── metrics/                  # Prometheus collectors + /metrics server
 │   ├── schemaregistry/           # Schema Registry client with cache
 │   ├── seeder/                   # YAML schema → gofakeit generator → kafka.Writer

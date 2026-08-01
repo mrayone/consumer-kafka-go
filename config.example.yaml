@@ -15,6 +15,12 @@ schema_subject: "my-topic-value"
 # Postgres event store (required for --sink=postgres|both)
 postgres_dsn: "postgres://user:pass@localhost:5432/event_store?sslmode=disable"
 
+# Console verbosity (logrus): error | info | debug
+#   error = only errors
+#   info  = + lifecycle and per-batch consumption sizes (default)
+#   debug = + decoded messages printed as JSON to stdout
+log_level: "info"
+
 # Prometheus metrics endpoint (empty disables it). Default ":2112".
 metrics_addr: ":2112"
 

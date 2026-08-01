@@ -5,13 +5,13 @@ package metrics
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -56,7 +56,7 @@ var (
 
 // Serve starts the /metrics HTTP endpoint on addr. It returns immediately;
 // the server is shut down when ctx is cancelled. A nil/empty addr is a no-op.
-func Serve(ctx context.Context, addr string, errLog *log.Logger) {
+func Serve(ctx context.Context, addr string, log *logrus.Logger) {
 	if addr == "" {
 		return
 	}
@@ -65,9 +65,9 @@ func Serve(ctx context.Context, addr string, errLog *log.Logger) {
 	srv := &http.Server{Addr: addr, Handler: mux}
 
 	go func() {
-		errLog.Printf("metrics listening on %s/metrics", addr)
+		log.Infof("metrics listening on %s/metrics", addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errLog.Printf("metrics server error: %v", err)
+			log.WithError(err).Error("metrics server error")
 		}
 	}()
 

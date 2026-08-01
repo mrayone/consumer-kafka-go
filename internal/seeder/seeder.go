@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/plain"
+	"github.com/sirupsen/logrus"
 
 	"github.com/mayconrayone/consumer-kafka-go/internal/config"
 )
@@ -32,10 +32,10 @@ type Seeder struct {
 	cfg    *config.Config
 	schema *Schema
 	opts   Options
-	errLog *log.Logger
+	log    *logrus.Logger
 }
 
-func New(cfg *config.Config, schema *Schema, opts Options, errLog *log.Logger) *Seeder {
+func New(cfg *config.Config, schema *Schema, opts Options, log *logrus.Logger) *Seeder {
 	if opts.Count <= 0 {
 		opts.Count = 1000
 	}
@@ -48,7 +48,7 @@ func New(cfg *config.Config, schema *Schema, opts Options, errLog *log.Logger) *
 	if opts.Partitions <= 0 {
 		opts.Partitions = 1
 	}
-	return &Seeder{cfg: cfg, schema: schema, opts: opts, errLog: errLog}
+	return &Seeder{cfg: cfg, schema: schema, opts: opts, log: log}
 }
 
 func (s *Seeder) transport() *kafka.Transport {
@@ -101,7 +101,7 @@ func (s *Seeder) Run(ctx context.Context) error {
 	}
 	defer writer.Close()
 
-	s.errLog.Printf("seeding count=%d workers=%d batch=%d topic=%s broker=%s",
+	s.log.Infof("seeding count=%d workers=%d batch=%d topic=%s broker=%s",
 		s.opts.Count, s.opts.Workers, s.opts.BatchSize, s.cfg.TargetTopic, s.cfg.BrokerURL)
 	start := time.Now()
 
@@ -134,7 +134,7 @@ func (s *Seeder) Run(ctx context.Context) error {
 	wg.Wait()
 
 	elapsed := time.Since(start)
-	s.errLog.Printf("seeded %d/%d events in %s (%.0f msg/s)",
+	s.log.Infof("seeded %d/%d events in %s (%.0f msg/s)",
 		produced.Load(), s.opts.Count, elapsed.Round(time.Millisecond),
 		float64(produced.Load())/elapsed.Seconds())
 	return runErr
@@ -151,7 +151,7 @@ func (s *Seeder) produce(ctx context.Context, w *kafka.Writer, gen *Generator, t
 		}
 		n := produced.Add(int64(len(batch)))
 		if n%10000 < int64(len(batch)) {
-			s.errLog.Printf("progress: %d events produced", n)
+			s.log.Infof("progress: %d events produced", n)
 		}
 		batch = batch[:0]
 		return nil

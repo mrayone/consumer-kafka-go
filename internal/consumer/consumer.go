@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"log"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/plain"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/mayconrayone/consumer-kafka-go/internal/config"
@@ -29,16 +29,16 @@ type Consumer struct {
 	cfg     *config.Config
 	decoder deserializer.MessageDeserializer
 	sinks   []namedSink
-	errLog  *log.Logger
+	log     *logrus.Logger
 	tuning  config.TuningConfig
 }
 
-func New(cfg *config.Config, d deserializer.MessageDeserializer, sinks []sink.Sink, errLog *log.Logger) *Consumer {
+func New(cfg *config.Config, d deserializer.MessageDeserializer, sinks []sink.Sink, log *logrus.Logger) *Consumer {
 	named := make([]namedSink, 0, len(sinks))
 	for _, s := range sinks {
 		named = append(named, namedSink{name: sinkName(s), sink: s})
 	}
-	return &Consumer{cfg: cfg, decoder: d, sinks: named, errLog: errLog, tuning: cfg.Tuning}
+	return &Consumer{cfg: cfg, decoder: d, sinks: named, log: log, tuning: cfg.Tuning}
 }
 
 func sinkName(s sink.Sink) string {
@@ -91,8 +91,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 	if n < 1 {
 		n = 1
 	}
-	c.errLog.Printf("starting %d concurrent readers: topic=%s group=%s broker=%s batch_size=%d workers=%d",
-		n, c.cfg.TargetTopic, c.cfg.GroupID, c.cfg.BrokerURL, c.tuning.BatchSize, c.tuning.Workers)
+	c.log.Infof("starting %d concurrent readers: topic=%s group=%s broker=%s batch_size=%d workers=%d log_level=%s",
+		n, c.cfg.TargetTopic, c.cfg.GroupID, c.cfg.BrokerURL, c.tuning.BatchSize, c.tuning.Workers, c.cfg.LogLevel)
 
 	g, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < n; i++ {
@@ -162,13 +162,13 @@ func (c *Consumer) runReader(ctx context.Context, id int) error {
 				batch = batch[:0]
 			}
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				c.errLog.Printf("reader %s shutting down", readerID)
+				c.log.Infof("reader %s shutting down", readerID)
 				return nil
 			}
 			return err
 
 		case <-ctx.Done():
-			c.errLog.Printf("reader %s shutting down", readerID)
+			c.log.Infof("reader %s shutting down", readerID)
 			return nil
 		}
 	}
@@ -199,6 +199,18 @@ func (c *Consumer) flush(ctx context.Context, reader *kafka.Reader, msgs []kafka
 		metrics.BatchSize.Observe(float64(len(events)))
 	}
 
+	if c.log.IsLevelEnabled(logrus.InfoLevel) {
+		var bytes int
+		for i := range msgs {
+			bytes += len(msgs[i].Value)
+		}
+		c.log.WithFields(logrus.Fields{
+			"messages": len(msgs),
+			"decoded":  len(events),
+			"bytes":    bytes,
+		}).Info("consumed batch")
+	}
+
 	allOK := true
 	for _, ns := range c.sinks {
 		if len(events) == 0 {
@@ -210,7 +222,7 @@ func (c *Consumer) flush(ctx context.Context, reader *kafka.Reader, msgs []kafka
 		if err != nil {
 			allOK = false
 			metrics.SinkErrors.WithLabelValues(ns.name).Inc()
-			c.errLog.Printf("sink %s error (%d events): %v", ns.name, len(events), err)
+			c.log.WithError(err).WithFields(logrus.Fields{"sink": ns.name, "events": len(events)}).Error("sink flush failed")
 			continue
 		}
 		metrics.EventsWritten.WithLabelValues(ns.name).Add(float64(len(events)))
@@ -246,7 +258,7 @@ func (c *Consumer) decodeBatch(msgs []kafka.Message) []sink.Event {
 			d, err := c.decoder.Deserialize(m.Value)
 			if err != nil {
 				metrics.DecodeErrors.Inc()
-				c.errLog.Printf("deserialize error (offset=%d partition=%d): %v", m.Offset, m.Partition, err)
+				c.log.WithError(err).WithFields(logrus.Fields{"offset": m.Offset, "partition": m.Partition}).Error("deserialize failed")
 				return
 			}
 			decoded[i] = sink.Event{

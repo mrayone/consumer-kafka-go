@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +12,7 @@ import (
 	"github.com/mayconrayone/consumer-kafka-go/internal/config"
 	"github.com/mayconrayone/consumer-kafka-go/internal/consumer"
 	"github.com/mayconrayone/consumer-kafka-go/internal/deserializer"
+	"github.com/mayconrayone/consumer-kafka-go/internal/logging"
 	"github.com/mayconrayone/consumer-kafka-go/internal/metrics"
 	"github.com/mayconrayone/consumer-kafka-go/internal/output"
 	"github.com/mayconrayone/consumer-kafka-go/internal/seeder"
@@ -69,12 +69,13 @@ func seedCmd() *cobra.Command {
 			if err := cfg.ValidateProducer(); err != nil {
 				return err
 			}
+			cfg.ApplyDefaults()
 			schema, err := seeder.LoadSchema(schemaPath)
 			if err != nil {
 				return err
 			}
-			errLog := log.New(os.Stderr, "[seeder] ", log.LstdFlags|log.Lmicroseconds)
-			return seeder.New(cfg, schema, opts, errLog).Run(cmd.Context())
+			logger := logging.New(cfg.LogLevel)
+			return seeder.New(cfg, schema, opts, logger).Run(cmd.Context())
 		},
 	}
 	cmd.Flags().StringVarP(&configPath, "config", "c", "", "path to YAML config file (required)")
@@ -99,18 +100,24 @@ func runConsume(ctx context.Context, format, configPath, sinkName string) error 
 	}
 	cfg.ApplyDefaults()
 
-	errLog := log.New(os.Stderr, "[consumer-kafka-go] ", log.LstdFlags|log.Lmicroseconds)
-	metrics.Serve(ctx, cfg.MetricsAddr, errLog)
+	logger := logging.New(cfg.LogLevel)
+	metrics.Serve(ctx, cfg.MetricsAddr, logger)
 
 	dec, err := deserializer.New(format, cfg)
 	if err != nil {
 		return err
 	}
 
+	// Decoded messages are printed to stdout only at debug level; at info/error
+	// the console stays clean (the consumer still logs per-batch sizes at info).
+	verbose := config.LogRank(cfg.LogLevel) >= config.LogRank(config.LogDebug)
+
 	var sinks []sink.Sink
 	switch sinkName {
 	case "stdout", "both":
-		sinks = append(sinks, sink.NewStdout(output.New(os.Stdout)))
+		if verbose {
+			sinks = append(sinks, sink.NewStdout(output.New(os.Stdout)))
+		}
 	case "postgres":
 	default:
 		return fmt.Errorf("unsupported sink %q (expected stdout|postgres|both)", sinkName)
@@ -131,6 +138,6 @@ func runConsume(ctx context.Context, format, configPath, sinkName string) error 
 		}
 	}()
 
-	c := consumer.New(cfg, dec, sinks, errLog)
+	c := consumer.New(cfg, dec, sinks, logger)
 	return c.Run(ctx)
 }
