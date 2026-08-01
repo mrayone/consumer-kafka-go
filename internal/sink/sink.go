@@ -16,9 +16,12 @@ type Event struct {
 	Decoded   map[string]any
 }
 
-// Sink receives decoded events. Implementations must be safe for
-// sequential use by a single consumer loop.
+// Sink receives batches of decoded events. Store is called once per flush
+// with all events accumulated since the last flush, letting implementations
+// amortize per-message cost (e.g. a single DB round-trip per batch).
+// Store may be called concurrently by multiple readers, so implementations
+// must be safe for concurrent use.
 type Sink interface {
-	Store(ctx context.Context, evt Event) error
+	Store(ctx context.Context, evts []Event) error
 	Close() error
 }

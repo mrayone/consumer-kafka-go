@@ -1,0 +1,115 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "5s",
+  "timezone": "browser",
+  "title": "consumer-kafka-go",
+  "uid": "ckg-consumer",
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Consumer lag",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "ckg_consumer_lag", "legendFormat": "lag" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Consume throughput (msg/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "rate(ckg_messages_consumed_total[1m])", "legendFormat": "fetched" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Events written per sink (rows/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (sink) (rate(ckg_events_written_total[1m]))", "legendFormat": "{{sink}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Sink flush latency p95 (s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, sink) (rate(ckg_batch_flush_duration_seconds_bucket[5m])))", "legendFormat": "{{sink}} p95" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Average batch size",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "rate(ckg_batch_size_sum[1m]) / clamp_min(rate(ckg_batch_size_count[1m]), 1)", "legendFormat": "events/batch" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Errors (decode + sink)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "rate(ckg_decode_errors_total[1m])", "legendFormat": "decode" },
+        { "refId": "B", "expr": "sum by (sink) (rate(ckg_sink_errors_total[1m]))", "legendFormat": "sink {{sink}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "DB rows per event_store table",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "ckg_pg_event_store_live_rows", "legendFormat": "{{table}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "DB insert rate per table (rows/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "rate(ckg_pg_event_store_inserts_total[1m])", "legendFormat": "{{table}}" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "DB table size on disk",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "ckg_pg_event_store_size_bytes", "legendFormat": "{{table}}" }
+      ]
+    }
+  ]
+}

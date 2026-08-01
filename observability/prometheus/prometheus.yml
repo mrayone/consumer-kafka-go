@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # The consumer runs on the host (make run-json-pg), so we reach its /metrics
+  # endpoint via the Docker host gateway.
+  - job_name: consumer-kafka-go
+    static_configs:
+      - targets: ["host.docker.internal:2112"]
+
+  # Postgres stats (row counts, inserts, table sizes) via postgres_exporter.
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]

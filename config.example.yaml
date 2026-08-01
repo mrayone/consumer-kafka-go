@@ -14,3 +14,18 @@ schema_subject: "my-topic-value"
 
 # Postgres event store (required for --sink=postgres|both)
 postgres_dsn: "postgres://user:pass@localhost:5432/event_store?sslmode=disable"
+
+# Prometheus metrics endpoint (empty disables it). Default ":2112".
+metrics_addr: ":2112"
+
+# Throughput tuning. Omit the whole block to use the defaults shown below.
+tuning:
+  consumers: 1            # parallel readers in the group; raise up to the topic partition count
+  min_bytes: 100000       # 100 KB — wait for a real batch before returning
+  max_bytes: 10000000     # 10 MB per fetch
+  queue_capacity: 1000    # reader prefetch buffer
+  max_wait_ms: 500        # cap latency when min_bytes isn't reached
+  batch_size: 500         # events per sink flush / offset commit
+  batch_timeout_ms: 200   # flush a partial batch after this long
+  workers: 4              # concurrent decoders per batch
+  lag_poll_ms: 3000       # how often to publish consumer lag to metrics

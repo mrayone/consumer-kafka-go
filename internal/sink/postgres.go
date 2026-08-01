@@ -45,18 +45,24 @@ func NewPostgres(ctx context.Context, dsn string) (*Postgres, error) {
 	return &Postgres{pool: pool}, nil
 }
 
-func (p *Postgres) Store(ctx context.Context, evt Event) error {
-	payload, err := json.Marshal(evt.Decoded)
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
+func (p *Postgres) Store(ctx context.Context, evts []Event) error {
+	if len(evts) == 0 {
+		return nil
 	}
 	batch := &pgx.Batch{}
-	for _, table := range []string{"event_store_pglz", "event_store_lz4"} {
-		batch.Queue(fmt.Sprintf(insertSQL, table),
-			evt.Topic, evt.Partition, evt.Offset, string(evt.Key), payload)
+	for _, evt := range evts {
+		payload, err := json.Marshal(evt.Decoded)
+		if err != nil {
+			return fmt.Errorf("marshal payload (offset=%d partition=%d): %w", evt.Offset, evt.Partition, err)
+		}
+		for _, table := range []string{"event_store_pglz", "event_store_lz4"} {
+			batch.Queue(fmt.Sprintf(insertSQL, table),
+				evt.Topic, evt.Partition, evt.Offset, string(evt.Key), payload)
+		}
 	}
+	// One network round-trip for the whole batch (2 inserts per event).
 	if err := p.pool.SendBatch(ctx, batch).Close(); err != nil {
-		return fmt.Errorf("insert event (offset=%d partition=%d): %w", evt.Offset, evt.Partition, err)
+		return fmt.Errorf("insert batch of %d events: %w", len(evts), err)
 	}
 	return nil
 }

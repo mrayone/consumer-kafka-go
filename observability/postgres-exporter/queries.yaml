@@ -1,0 +1,23 @@
+# Custom postgres_exporter queries focused on the event_store tables so the
+# Grafana dashboard can show the consumer's impact on the database.
+ckg_pg_event_store:
+  query: >
+    SELECT relname AS table,
+           n_live_tup AS live_rows,
+           n_tup_ins  AS inserts_total,
+           pg_total_relation_size(relid) AS size_bytes
+    FROM pg_stat_user_tables
+    WHERE relname LIKE 'event_store%'
+  metrics:
+    - table:
+        usage: LABEL
+        description: "Event store table name"
+    - live_rows:
+        usage: GAUGE
+        description: "Estimated live rows in the table"
+    - inserts_total:
+        usage: COUNTER
+        description: "Cumulative rows inserted into the table"
+    - size_bytes:
+        usage: GAUGE
+        description: "Total on-disk size of the table (incl. indexes/toast)"

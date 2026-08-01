@@ -9,3 +9,18 @@ schema_subject: "demo-topic-value"
 
 # Postgres event store (required for --sink=postgres|both)
 postgres_dsn: "postgres://events:events@localhost:5432/event_store?sslmode=disable"
+
+# Prometheus metrics endpoint (scraped by the local Grafana stack).
+metrics_addr: ":2112"
+
+# Throughput tuning (defaults shown; omit any field to use its default).
+tuning:
+  consumers: 4            # parallel readers in the group (matches the 4-partition topic)
+  min_bytes: 100000       # 100 KB — wait for a real batch before returning
+  max_bytes: 10000000     # 10 MB per fetch
+  queue_capacity: 1000    # reader prefetch buffer
+  max_wait_ms: 500        # cap latency when min_bytes isn't reached
+  batch_size: 500         # events per sink flush / offset commit
+  batch_timeout_ms: 200   # flush a partial batch after this long
+  workers: 4              # concurrent decoders per batch
+  lag_poll_ms: 3000       # how often to publish consumer lag to metrics

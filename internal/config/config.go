@@ -25,6 +25,27 @@ type Config struct {
 	SchemaRegistryPass string `yaml:"schema_registry_pass"`
 	SchemaSubject      string `yaml:"schema_subject"`
 	PostgresDSN        string `yaml:"postgres_dsn"`
+
+	// MetricsAddr is the listen address for the Prometheus /metrics endpoint.
+	// Empty disables metrics. Default ":2112".
+	MetricsAddr string `yaml:"metrics_addr"`
+
+	// Tuning controls consumer fetch/batch throughput. All fields have
+	// sensible defaults applied by ApplyDefaults.
+	Tuning TuningConfig `yaml:"tuning"`
+}
+
+// TuningConfig groups the knobs that trade latency for throughput.
+type TuningConfig struct {
+	Consumers      int `yaml:"consumers"`        // parallel readers in the group (cap at partition count)
+	MinBytes       int `yaml:"min_bytes"`        // min bytes per fetch (wait for a real batch)
+	MaxBytes       int `yaml:"max_bytes"`        // max bytes per fetch
+	QueueCapacity  int `yaml:"queue_capacity"`   // reader prefetch buffer
+	MaxWaitMs      int `yaml:"max_wait_ms"`      // max time to wait for MinBytes
+	BatchSize      int `yaml:"batch_size"`       // events buffered before a sink flush
+	BatchTimeoutMs int `yaml:"batch_timeout_ms"` // max time to wait before flushing a partial batch
+	Workers        int `yaml:"workers"`          // concurrent decoders per batch
+	LagPollMs      int `yaml:"lag_poll_ms"`      // interval for polling reader lag into metrics
 }
 
 func Load(path string) (*Config, error) {
@@ -37,6 +58,42 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
 	return &c, nil
+}
+
+// ApplyDefaults fills unset tuning/metrics fields with production-sane values.
+// Call after Load and before building the consumer.
+func (c *Config) ApplyDefaults() {
+	if c.MetricsAddr == "" {
+		c.MetricsAddr = ":2112"
+	}
+	t := &c.Tuning
+	if t.Consumers == 0 {
+		t.Consumers = 1
+	}
+	if t.MinBytes == 0 {
+		t.MinBytes = 100_000 // 100 KB
+	}
+	if t.MaxBytes == 0 {
+		t.MaxBytes = 10_000_000 // 10 MB
+	}
+	if t.QueueCapacity == 0 {
+		t.QueueCapacity = 1000
+	}
+	if t.MaxWaitMs == 0 {
+		t.MaxWaitMs = 500
+	}
+	if t.BatchSize == 0 {
+		t.BatchSize = 500
+	}
+	if t.BatchTimeoutMs == 0 {
+		t.BatchTimeoutMs = 200
+	}
+	if t.Workers == 0 {
+		t.Workers = 4
+	}
+	if t.LagPollMs == 0 {
+		t.LagPollMs = 3000
+	}
 }
 
 func (c *Config) Validate(format string) error {

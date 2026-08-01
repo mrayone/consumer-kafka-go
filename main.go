@@ -13,6 +13,7 @@ import (
 	"github.com/mayconrayone/consumer-kafka-go/internal/config"
 	"github.com/mayconrayone/consumer-kafka-go/internal/consumer"
 	"github.com/mayconrayone/consumer-kafka-go/internal/deserializer"
+	"github.com/mayconrayone/consumer-kafka-go/internal/metrics"
 	"github.com/mayconrayone/consumer-kafka-go/internal/output"
 	"github.com/mayconrayone/consumer-kafka-go/internal/seeder"
 	"github.com/mayconrayone/consumer-kafka-go/internal/sink"
@@ -96,6 +97,10 @@ func runConsume(ctx context.Context, format, configPath, sinkName string) error 
 	if err := cfg.Validate(format); err != nil {
 		return err
 	}
+	cfg.ApplyDefaults()
+
+	errLog := log.New(os.Stderr, "[consumer-kafka-go] ", log.LstdFlags|log.Lmicroseconds)
+	metrics.Serve(ctx, cfg.MetricsAddr, errLog)
 
 	dec, err := deserializer.New(format, cfg)
 	if err != nil {
@@ -126,7 +131,6 @@ func runConsume(ctx context.Context, format, configPath, sinkName string) error 
 		}
 	}()
 
-	errLog := log.New(os.Stderr, "[consumer-kafka-go] ", log.LstdFlags|log.Lmicroseconds)
 	c := consumer.New(cfg, dec, sinks, errLog)
 	return c.Run(ctx)
 }

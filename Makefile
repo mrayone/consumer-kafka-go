@@ -1,4 +1,4 @@
-.PHONY: help tidy build test vet run-json run-avro run-json-pg \
+.PHONY: help install tidy build test vet run-json run-avro run-json-pg \
 	docker-build docker-up docker-down docker-logs \
 	topic-create produce-json produce-avro register-avro-schema \
 	seed compare-compression psql \
@@ -8,6 +8,7 @@
 BINARY          := consumer-kafka-go
 LOCAL_CFG       := config.local.yaml
 TOPIC           := demo-topic
+PARTITIONS      := 4
 SUBJECT         := $(TOPIC)-value
 KAFKA_CONTAINER := ckg-kafka
 SR_URL          := http://localhost:8081
@@ -17,6 +18,11 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 # ---------- Go ----------
+
+install: ## Resolve, tidy and vendor all dependencies
+	go mod download
+	go mod tidy
+	go mod vendor
 
 tidy: ## go mod tidy
 	go mod tidy
@@ -44,11 +50,12 @@ run-json-pg: build ## Consume JSON and store events in the Postgres event store
 docker-build: ## Build the consumer container image
 	docker build -t $(BINARY):dev .
 
-docker-up: ## Start Confluent Kafka + Schema Registry + Kafka UI
+docker-up: ## Start Confluent Kafka + Schema Registry + Kafka UI + observability
 	docker compose up -d
 	@echo "waiting for Kafka to be healthy..."
 	@until [ "$$(docker inspect -f '{{.State.Health.Status}}' $(KAFKA_CONTAINER) 2>/dev/null)" = "healthy" ]; do sleep 2; done
 	@echo "Kafka ready. UI: http://localhost:8080"
+	@echo "Grafana: http://localhost:3000 (dashboard 'consumer-kafka-go') | Prometheus: http://localhost:9090"
 
 docker-down: ## Stop and remove the local stack
 	docker compose down -v
@@ -56,14 +63,25 @@ docker-down: ## Stop and remove the local stack
 docker-logs: ## Tail Kafka logs
 	docker compose logs -f kafka
 
+observability-up: ## Start only Prometheus + Grafana + postgres-exporter
+	docker compose up -d postgres-exporter prometheus grafana
+	@echo "Grafana: http://localhost:3000 (anonymous admin) | Prometheus: http://localhost:9090"
+	@echo "Run the consumer with metrics_addr set (default :2112), e.g. make run-json-pg"
+
 # ---------- Test data helpers ----------
 
-topic-create: ## Create the demo topic
+topic-create: ## Create the demo topic (PARTITIONS=4)
 	docker exec $(KAFKA_CONTAINER) kafka-topics \
 		--bootstrap-server localhost:9092 \
 		--create --topic $(TOPIC) \
-		--partitions 1 --replication-factor 1 \
+		--partitions $(PARTITIONS) --replication-factor 1 \
 		--if-not-exists
+	@# Bump partitions if the topic already existed with fewer (Kafka only grows).
+	@docker exec $(KAFKA_CONTAINER) kafka-topics \
+		--bootstrap-server localhost:9092 \
+		--alter --topic $(TOPIC) --partitions $(PARTITIONS) 2>/dev/null || true
+	@docker exec $(KAFKA_CONTAINER) kafka-topics \
+		--bootstrap-server localhost:9092 --describe --topic $(TOPIC) | head -1
 
 produce-json: topic-create ## Produce a few JSON records to demo-topic
 	@printf '{"id":1,"user":"alice","action":"login"}\n{"id":2,"user":"bob","action":"purchase","amount":42.5}\n{"id":3,"user":"carol","action":"logout"}\n' \

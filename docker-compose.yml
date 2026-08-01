@@ -73,3 +73,48 @@ services:
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
     ports:
       - "8080:8080"
+
+  # ---- Observability: postgres-exporter + Prometheus + Grafana ----
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: ckg-postgres-exporter
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_NAME: "postgresql://events:events@postgres:5432/event_store?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/pgexporter/queries.yaml
+    volumes:
+      - ./observability/postgres-exporter/queries.yaml:/etc/pgexporter/queries.yaml:ro
+    ports:
+      - "9187:9187"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: ckg-prometheus
+    depends_on:
+      - postgres-exporter
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # host.docker.internal lets Prometheus scrape the consumer running on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: ckg-grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_USERS_DEFAULT_THEME: dark
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
