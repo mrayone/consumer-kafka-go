@@ -1,4 +1,4 @@
-.PHONY: help install tidy build test vet run-json run-avro run-json-pg \
+.PHONY: help install tidy build test vet run-json run-avro run-json-pg run-avro-pg \
 	docker-build docker-up docker-down docker-logs \
 	topic-create produce-json produce-avro register-avro-schema \
 	seed compare-compression psql \
@@ -44,6 +44,9 @@ run-avro: build ## Run against the local stack in Avro mode
 
 run-json-pg: build ## Consume JSON and store events in the Postgres event store
 	./$(BINARY) --format=json --config=$(LOCAL_CFG) --sink=both
+
+run-avro-pg: build ## Consume Avro and store events in the Postgres event store
+	./$(BINARY) --format=avro --config=$(LOCAL_CFG) --sink=both
 
 # ---------- Docker ----------
 

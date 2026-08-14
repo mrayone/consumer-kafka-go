@@ -65,7 +65,14 @@ The config also accepts `log_level` (`error|info|debug`, see [Logging & verbosit
 
 # Store decoded events in the Postgres event store (and also print with --sink=both)
 ./consumer-kafka-go --format=json --config=./config.yaml --sink=postgres
+
+# Avro-encoded topic straight into the Postgres event store
+./consumer-kafka-go --format=avro --config=./config.yaml --sink=postgres
 ```
+
+The `--sink` flag is independent of `--format`: any format (`json`/`avro`) can be
+paired with any sink (`stdout`/`postgres`/`both`), since decoding produces the same
+generic map that every sink consumes.
 
 ### Logging & verbosity
 
@@ -141,6 +148,7 @@ Local end-to-end run:
 make docker-up                    # full local stack (see "Run & test locally")
 make migrate-up                   # create the event_store tables
 make run-json-pg                  # consumer with stdout + postgres sinks (leave it running)
+# or, for an Avro topic:  make run-avro-pg
 make seed SEED_COUNT=50000        # in another terminal
 make compare-compression          # pglz vs lz4 size report
 ```
